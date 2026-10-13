@@ -1,0 +1,2 @@
+Шрифты в этой папке распространяются по лицензии SIL Open Font License 1.1 (https://openfontlicense.org):
+X Typewriter © 2021-2024 GGBotNet; Courier Prime; Special Elite; PT Mono; Anonymous Pro; Golos Text.

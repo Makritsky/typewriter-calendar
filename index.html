@@ -1,0 +1,732 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#e9eaec" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#17181b" media="(prefers-color-scheme: dark)">
+<meta name="description" content="Календарь свободных дат для сторис в стиле печатной машинки">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Календарь">
+<title>Машинописный календарь</title>
+<link rel="stylesheet" href="fonts.css">
+<style>
+/* Layout: story preview on the left (the product), a quiet control column on the right; stacks on phones. */
+:root{
+  --bg:#e9eaec;
+  --surface:#f7f7f8;
+  --line:#cfd1d5;
+  --ink:#16171a;
+  --muted:#5d6068;
+  --ribbon:#b3261e;
+  --ribbon-ink:#ffffff;
+  --shadow:0 1px 2px rgba(20,22,26,.08),0 12px 40px rgba(20,22,26,.14);
+  --f-ui:"Golos Text",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-type:"X Typewriter","Courier Prime","Courier New",monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#17181b;--surface:#212226;--line:#34363c;--ink:#ecedf0;--muted:#a1a4ad;--ribbon:#e0574d;--ribbon-ink:#160a09;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 16px 48px rgba(0,0,0,.5);color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#17181b;--surface:#212226;--line:#34363c;--ink:#ecedf0;--muted:#a1a4ad;--ribbon:#e0574d;--ribbon-ink:#160a09;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 16px 48px rgba(0,0,0,.5);color-scheme:dark}
+html,body{background:var(--bg);color:var(--ink);margin:0}
+html{-webkit-text-size-adjust:100%}
+[hidden]{display:none!important}
+body{font-family:var(--f-ui);font-size:15px;line-height:1.45;padding-inline:max(16px,env(safe-area-inset-left)) max(16px,env(safe-area-inset-right));padding-block:calc(20px + env(safe-area-inset-top)) calc(40px + env(safe-area-inset-bottom))}
+*{box-sizing:border-box}
+.wrap{max-width:1180px;margin:0 auto;display:flex;flex-direction:column;gap:20px}
+header.top{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:8px 20px}
+h1{font-family:var(--f-type);font-weight:700;font-size:clamp(22px,3vw,30px);letter-spacing:.04em;margin:0;text-wrap:balance}
+h1 span{color:var(--ribbon)}
+.sub{color:var(--muted);margin:0;max-width:60ch}
+.app{display:grid;grid-template-columns:minmax(0,auto) minmax(300px,380px);gap:28px;align-items:start;justify-content:center}
+@media (max-width:860px){.app{grid-template-columns:minmax(0,1fr)}}
+.stage{display:flex;flex-direction:column;align-items:center;gap:14px;min-width:0}
+.monthbar{display:flex;align-items:center;gap:10px;width:100%;justify-content:center}
+.monthbar .label{font-family:var(--f-type);font-size:20px;font-weight:700;min-width:13ch;text-align:center;letter-spacing:.03em}
+.canvas-box{position:relative;height:min(76vh,860px);aspect-ratio:9/16;max-width:100%;box-shadow:var(--shadow);border-radius:4px;overflow:hidden;background:#fff}
+@media (max-width:860px){.canvas-box{height:auto;width:min(100%,460px)}}
+canvas#cv{display:block;width:100%;height:100%;cursor:pointer;touch-action:manipulation}
+.safe{position:absolute;left:0;right:0;pointer-events:none;border:0 dashed rgba(179,38,30,.5);background:rgba(179,38,30,.05)}
+.safe.t{top:0;height:12.5%;border-bottom-width:1px}
+.safe.b{bottom:0;height:11.5%;border-top-width:1px}
+.hint{color:var(--muted);font-size:13px;text-align:center;margin:0}
+.tools{display:flex;flex-wrap:wrap;gap:10px;justify-content:center}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:999px;padding:3px;background:var(--surface)}
+.seg button{border:0;background:transparent;color:var(--ink);font:inherit;font-size:14px;padding:7px 14px;border-radius:999px;cursor:pointer;display:inline-flex;gap:6px;align-items:center}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
+.btn{font:inherit;font-size:14px;border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:8px 14px;border-radius:999px;cursor:pointer}
+.btn:hover{border-color:var(--muted)}
+.btn.primary{background:var(--ribbon);border-color:var(--ribbon);color:var(--ribbon-ink);font-weight:600}
+.btn.icon{width:38px;height:38px;padding:0;display:inline-grid;place-items:center;font-size:18px}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--ribbon);outline-offset:2px}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:18px;display:flex;flex-direction:column;gap:18px;min-width:0}
+.group{display:flex;flex-direction:column;gap:10px}
+.group h2{font-family:var(--f-type);font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin:0;font-weight:700}
+.row{display:flex;gap:10px;flex-wrap:wrap}
+.row>*{flex:1 1 120px;min-width:0}
+label.f{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted)}
+select,input[type=number],input[type=text]{font:inherit;font-size:14px;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:7px 9px;width:100%}
+.check{display:flex;gap:8px;align-items:center;font-size:14px}
+.swatches{display:flex;gap:8px;flex-wrap:wrap}
+.sw{width:32px;height:32px;border-radius:50%;border:2px solid var(--surface);outline:1px solid var(--line);cursor:pointer;padding:0}
+.sw[aria-pressed="true"]{outline:2px solid var(--ink);outline-offset:1px}
+.upload{font-size:13px;color:var(--muted)}
+.upload input{font-size:13px;max-width:100%}
+.note{font-size:12.5px;color:var(--muted);margin:0}
+input[type=range]{width:100%;accent-color:var(--ribbon)}
+.slotbox{width:min(100%,460px);background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:10px}
+.slothead{display:flex;justify-content:space-between;align-items:center;gap:10px;font-family:var(--f-type);font-size:17px}
+.stepper{display:grid;grid-template-columns:1fr auto 2.5ch auto;align-items:center;gap:8px;font-size:14px}
+.stepper output{font-family:var(--f-type);font-size:20px;text-align:center;font-variant-numeric:tabular-nums}
+.seg{flex-wrap:wrap;justify-content:center;border-radius:22px}
+.toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:999px;font-size:14px;opacity:0;transition:opacity .2s;pointer-events:none}
+.toast.on{opacity:1}
+.modal{position:fixed;inset:0;background:rgba(10,10,12,.7);display:grid;place-items:center;padding:16px;z-index:10}
+.modal .card{background:var(--surface);color:var(--ink);border-radius:10px;padding:16px;max-width:420px;width:100%;display:flex;flex-direction:column;gap:12px;max-height:94vh}
+.modal img{width:100%;height:auto;max-height:66vh;object-fit:contain;border-radius:4px;background:#fff}
+@media (prefers-reduced-motion:reduce){.toast{transition:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <h1>Машинописный <span>календарь</span></h1>
+    <p class="sub">Все дни без отметки — свободные. Отмечай только исключения: кружком — особые дни, «x» или чертой — занятые, точками мест — сколько съёмок в день. Готовая сторис 1080×1920.</p>
+  </header>
+
+  <div class="app">
+    <section class="stage">
+      <div class="monthbar">
+        <button class="btn icon" id="prev" aria-label="Предыдущий месяц">‹</button>
+        <div class="label" id="mlabel">—</div>
+        <button class="btn icon" id="next" aria-label="Следующий месяц">›</button>
+      </div>
+      <div class="tools">
+        <div class="seg" role="group" aria-label="Что отмечаем">
+          <button data-tool="special" aria-pressed="true">◯ Особый</button>
+          <button data-tool="typed" aria-pressed="false">x Перебить</button>
+          <button data-tool="pen" aria-pressed="false">⁄ Зачеркнуть</button>
+          <button data-tool="slots" aria-pressed="false">o o x Места</button>
+          <button data-tool="erase" aria-pressed="false">Стереть</button>
+        </div>
+      </div>
+      <div class="canvas-box" id="cbox">
+        <canvas id="cv" width="1080" height="1920" aria-label="Календарь месяца, нажми на дату, чтобы отметить"></canvas>
+        <div class="safe t" id="safeT" hidden></div>
+        <div class="safe b" id="safeB" hidden></div>
+      </div>
+      <div class="slotbox" id="slotbox" hidden>
+        <div class="slothead"><strong id="slotTitle">—</strong><button class="btn" id="slotDone">Готово</button></div>
+        <div class="stepper"><span>Съёмок в этот день</span><button class="btn icon" data-step="slots:-1" aria-label="Меньше съёмок">−</button><output id="slotN">0</output><button class="btn icon" data-step="slots:1" aria-label="Больше съёмок">+</button></div>
+        <div class="stepper"><span>Из них уже занято</span><button class="btn icon" data-step="booked:-1" aria-label="Меньше занятых">−</button><output id="bookN">0</output><button class="btn icon" data-step="booked:1" aria-label="Больше занятых">+</button></div>
+        <p class="note">Когда заняты все места, дата сама перебивается «x».</p>
+      </div>
+      <p class="hint" id="hint">Повторное нажатие той же отметкой снимает её.</p>
+      <div class="tools">
+        <button class="btn" id="clear">Очистить месяц</button>
+        <button class="btn primary" id="dl">Скачать PNG</button>
+      </div>
+    </section>
+
+    <aside class="panel">
+      <div class="group">
+        <h2>Месяц</h2>
+        <div class="row">
+          <label class="f">Месяц<select id="selMonth"></select></label>
+          <label class="f">Год<input type="number" id="selYear" min="1900" max="2200" step="1"></label>
+        </div>
+      </div>
+
+      <div class="group">
+        <h2>Язык</h2>
+        <div class="row">
+          <label class="f">Надписи
+            <select id="lang">
+              <option value="both">Русский + English</option>
+              <option value="ru">Только русский</option>
+              <option value="en">Only English</option>
+            </select>
+          </label>
+        </div>
+      </div>
+
+      <div class="group">
+        <h2>Шрифт машинки</h2>
+        <label class="f">Гарнитура
+          <select id="font">
+            <option value="xt">X Typewriter</option>
+            <option value="cp">Courier Prime</option>
+            <option value="se">Special Elite (потёртый)</option>
+            <option value="cn">Courier New (системный)</option>
+            <option value="ap">Anonymous Pro</option>
+            <option value="pt">PT Mono</option>
+            <option value="user" id="optUser" disabled>Свой шрифт — не загружен</option>
+          </select>
+        </label>
+        <label class="upload">Загрузить другой шрифт (.ttf / .otf / .woff):
+          <input type="file" id="fontFile" accept=".ttf,.otf,.woff,.woff2">
+        </label>
+        <p class="note">В Courier Prime и Special Elite нет кириллицы — русские буквы подставятся из Courier New.</p>
+      </div>
+
+      <div class="group">
+        <h2>Отметки</h2>
+        <div class="f" style="font-size:13px;color:var(--muted)">Цвет ручки (кружки и зачёркивания)</div>
+        <div class="swatches" id="pens"></div>
+      </div>
+
+      <div class="group">
+        <h2>Бумага и лента</h2>
+        <div class="row">
+          <label class="f">Бумага
+            <select id="paper">
+              <option value="paper">Белая, с фактурой</option>
+              <option value="clean">Чисто белая</option>
+            </select>
+          </label>
+        </div>
+        <label class="f">Плотность краски
+          <input type="range" id="weight" min="0" max="3" step="0.25">
+        </label>
+        <label class="check"><input type="checkbox" id="redHead"> Месяц красной половиной ленты</label>
+        <label class="check"><input type="checkbox" id="showSafe"> Показать зоны интерфейса сторис</label>
+        <button class="btn" id="reseed">Перепечатать (другие неровности)</button>
+      </div>
+
+      <div class="group">
+        <h2>Тексты</h2>
+        <label class="f">Верхняя строка<input type="text" id="topText" maxlength="60"></label>
+        <label class="f">Подпись внизу<input type="text" id="footText" maxlength="60"></label>
+        <p class="note">Пустое поле — текст по умолчанию для выбранного языка.</p>
+      </div>
+
+    </aside>
+  </div>
+</div>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+(() => {
+const W = 1080, H = 1920;
+const RU_M = ["ЯНВАРЬ","ФЕВРАЛЬ","МАРТ","АПРЕЛЬ","МАЙ","ИЮНЬ","ИЮЛЬ","АВГУСТ","СЕНТЯБРЬ","ОКТЯБРЬ","НОЯБРЬ","ДЕКАБРЬ"];
+const EN_M = ["JANUARY","FEBRUARY","MARCH","APRIL","MAY","JUNE","JULY","AUGUST","SEPTEMBER","OCTOBER","NOVEMBER","DECEMBER"];
+const RU_W = ["ПН","ВТ","СР","ЧТ","ПТ","СБ","ВС"];
+const EN_W = ["mo","tu","we","th","fr","sa","su"];
+const RU_UI = ["Январь","Февраль","Март","Апрель","Май","Июнь","Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"];
+const FONTS = {
+  xt:'"X Typewriter","Courier New","PT Mono",monospace',
+  cp:'"Courier Prime","Courier New","PT Mono",monospace',
+  se:'"Special Elite","Courier New","PT Mono",monospace',
+  cn:'"Courier New","Courier Prime","PT Mono",monospace',
+  ap:'"Anonymous Pro","PT Mono",monospace',
+  pt:'"PT Mono",monospace',
+  user:'"UserType","Courier New","PT Mono",monospace'
+};
+const PENS = [
+  {id:"red", c:"#c62a22", name:"Красная ручка"},
+  {id:"blue", c:"#1f3e9c", name:"Синяя ручка"},
+  {id:"black", c:"#1b1b1d", name:"Чёрная ручка"},
+  {id:"pencil", c:"#5a5c60", name:"Карандаш"}
+];
+const DEF_TEXT = {
+  both:{top:"ЗАПИСЬ НА СЪЁМКУ / BOOKING", foot:"запись в direct · DM to book"},
+  ru:{top:"ЗАПИСЬ НА СЪЁМКУ", foot:"запись в direct"},
+  en:{top:"BOOKING CALENDAR", foot:"DM to book"}
+};
+const INK = "#1c1b1d", RED = "#b8231b";
+const LEG = {
+  open:   {ru:"свободно", en:"open", both:"свободно / open"},
+  special:{ru:"особый день", en:"special day", both:"особый день / special"},
+  busy:   {ru:"занято", en:"booked", both:"занято / booked"},
+  slots:  {ru:"места на съёмку", en:"spots left", both:"места / spots"}
+};
+
+// ---------- storage ----------
+const store = {
+  get(k, d){ try{ const v = localStorage.getItem(k); return v==null ? d : JSON.parse(v); }catch(e){ return d; } },
+  set(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+};
+const now = new Date();
+let S = Object.assign({
+  y: now.getFullYear(), m: now.getMonth(), lang:"both", font:"xt", pen:"red", busyStyle:"typed",
+  paper:"paper", weight:1, redHead:false, showSafe:false, topText:"", footText:""
+}, store.get("twc.settings", {}));
+let MARKS = store.get("twc.marks", null);
+let SEEDS = store.get("twc.seeds", {});
+if (!MARKS){
+  // example marks on first open, so the look is visible straight away
+  MARKS = {};
+  const k = key(S.y, S.m);
+  MARKS[k] = {3:{s:"typed"},9:{s:"pen"},14:{s:"typed"},22:{s:"pen"},
+    8:{s:"special"},16:{s:"special",slots:3,booked:1},23:{s:"special"},
+    12:{slots:2,booked:1},19:{slots:2,booked:2},27:{slots:3,booked:0}};
+}
+// старый формат отметок ("free"/"busy") → новый
+for (const k in MARKS){ for (const d in MARKS[k]){ const v = MARKS[k][d];
+  if (v==="free") MARKS[k][d] = {s:"special"};
+  else if (v==="busy") MARKS[k][d] = {s: S.busyStyle==="pen" ? "pen" : "typed"};
+}}
+let tool = "special", editDay = null;
+// итоговое состояние дня: special / typed / pen / null + места
+function dayInfo(m){
+  if (!m) return {s:null, slots:0, booked:0};
+  const slots = m.slots||0, booked = Math.min(m.booked||0, slots);
+  let st = m.s || null;
+  if (slots>0 && booked>=slots && st!=="pen") st = "typed";
+  return {s:st, slots, booked};
+}
+function key(y,m){ return y + "-" + String(m+1).padStart(2,"0"); }
+function save(){ store.set("twc.settings", S); store.set("twc.marks", MARKS); store.set("twc.seeds", SEEDS); }
+
+// ---------- rng ----------
+function mulberry(a){ return function(){ a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
+function hash(str){ let h=2166136261; for (const ch of str){ h^=ch.charCodeAt(0); h=Math.imul(h,16777619); } return h>>>0; }
+
+// ---------- canvases ----------
+const cv = document.getElementById("cv"), ctx = cv.getContext("2d");
+const mk = () => { const c=document.createElement("canvas"); c.width=W; c.height=H; return c; };
+const inkC = mk(), ink = inkC.getContext("2d");
+const penC = mk(), pen = penC.getContext("2d");
+let paperCache = {}, speckle = null;
+
+function makePaper(kind){
+  if (paperCache[kind]) return paperCache[kind];
+  const c = mk(), g = c.getContext("2d");
+  g.fillStyle = "#ffffff"; g.fillRect(0,0,W,H);
+  if (kind === "paper"){
+    const r = mulberry(77);
+    const id = g.getImageData(0,0,W,H), d = id.data;
+    for (let i=0;i<d.length;i+=4){
+      const n = 251 + (r()-0.5)*7;
+      d[i]=n; d[i+1]=n-0.6; d[i+2]=n-1.8;
+    }
+    g.putImageData(id,0,0);
+    // soft uneven tone
+    for (let i=0;i<34;i++){
+      const x=r()*W, y=r()*H, rad=120+r()*380;
+      const gr=g.createRadialGradient(x,y,0,x,y,rad);
+      gr.addColorStop(0,`rgba(120,115,105,${0.012+r()*0.018})`); gr.addColorStop(1,"rgba(120,115,105,0)");
+      g.fillStyle=gr; g.fillRect(x-rad,y-rad,rad*2,rad*2);
+    }
+    // fibres
+    g.lineCap="round";
+    for (let i=0;i<420;i++){
+      const x=r()*W, y=r()*H, l=6+r()*22, a=r()*Math.PI;
+      g.strokeStyle=`rgba(90,88,84,${0.03+r()*0.05})`; g.lineWidth=0.6+r()*0.7;
+      g.beginPath(); g.moveTo(x,y); g.quadraticCurveTo(x+Math.cos(a)*l*0.5+(r()-.5)*6, y+Math.sin(a)*l*0.5+(r()-.5)*6, x+Math.cos(a)*l, y+Math.sin(a)*l); g.stroke();
+    }
+    // edge falloff
+    const v=g.createRadialGradient(W/2,H/2,H*0.35,W/2,H/2,H*0.75);
+    v.addColorStop(0,"rgba(60,55,50,0)"); v.addColorStop(1,"rgba(60,55,50,0.07)");
+    g.fillStyle=v; g.fillRect(0,0,W,H);
+  }
+  paperCache[kind] = c; return c;
+}
+function makeSpeckle(){
+  const c = mk(), g = c.getContext("2d"), r = mulberry(4242);
+  for (let i=0;i<90000;i++){
+    const s = r()<0.85 ? 1 : 2;
+    g.fillStyle = `rgba(0,0,0,${0.25+r()*0.7})`;
+    g.fillRect(r()*W, r()*H, s, s);
+  }
+  // worn ribbon streaks
+  for (let i=0;i<260;i++){
+    g.fillStyle = `rgba(0,0,0,${0.08+r()*0.18})`;
+    g.fillRect(r()*W, r()*H, 20+r()*140, 1);
+  }
+  return c;
+}
+
+// ---------- typewriter text ----------
+function fontStack(){ return FONTS[S.font] || FONTS.xt; }
+function typeText(c, text, x, y, o){
+  const size=o.size, rng=o.rng, track=o.track||0, color=o.color||INK;
+  c.font = `${o.bold?"700 ":""}${size}px ${fontStack()}`;
+  c.textBaseline = "alphabetic"; c.textAlign = "left";
+  const chars = [...text];
+  const ws = chars.map(ch => c.measureText(ch).width);
+  const total = ws.reduce((a,b)=>a+b,0) + track*(chars.length-1);
+  let cx = o.align==="center" ? x-total/2 : o.align==="right" ? x-total : x;
+  const spread = size * 0.012 * S.weight;
+  chars.forEach((ch,i) => {
+    const w = ws[i];
+    const dx=(rng()-.5)*size*0.035, dy=(rng()-.5)*size*0.055, rot=(rng()-.5)*0.03;
+    const alpha = 0.7 + rng()*0.3;
+    const ghost = rng(), fade = rng(), fadeTop = rng()<0.5, fadeA = 0.2+rng()*0.35;
+    if (ch.trim()){
+      c.save();
+      c.translate(cx+w/2+dx, y+dy); c.rotate(rot);
+      c.globalAlpha = alpha; c.fillStyle = color; c.strokeStyle = color;
+      c.fillText(ch, -w/2, 0);
+      if (spread>0){ c.lineWidth = spread; c.lineJoin="round"; c.strokeText(ch, -w/2, 0); }
+      if (ghost < 0.14){ c.globalAlpha = alpha*0.28; c.fillText(ch, -w/2+size*0.025, size*0.012); }
+      if (fade < 0.24){
+        // uneven key strike: one side of the glyph prints lighter, with a soft transition
+        c.globalCompositeOperation = "destination-out"; c.globalAlpha = fadeA * (size>80 ? 0.6 : 1);
+        const g = c.createLinearGradient(0, fadeTop ? -size*0.85 : size*0.15, 0, -size*0.3);
+        g.addColorStop(0, "rgba(0,0,0,1)"); g.addColorStop(1, "rgba(0,0,0,0)");
+        c.fillStyle = g;
+        c.fillRect(-w/2-2, -size, w+4, size*1.3);
+      }
+      c.restore();
+    }
+    cx += w + track;
+  });
+  return total;
+}
+
+// места: o — свободное место, x — занятое
+function typeSlots(c, cx, y, n, booked, rng, size){
+  const str = Array.from({length:n}, (_,i)=> i<booked ? "x" : "o").join(" ");
+  typeText(c, str, cx, y, {size, track:0, rng, align:"center"});
+}
+
+// ---------- pen marks ----------
+function penStroke(c, pts, width, color){
+  c.save(); c.strokeStyle=color; c.lineCap="round"; c.lineJoin="round";
+  for (let i=1;i<pts.length;i++){
+    const t=i/(pts.length-1);
+    c.lineWidth = width*(0.55+0.45*Math.sin(Math.PI*Math.min(1,t*1.15))) ;
+    c.beginPath(); c.moveTo(pts[i-1][0],pts[i-1][1]); c.lineTo(pts[i][0],pts[i][1]); c.stroke();
+  }
+  c.restore();
+}
+function penCircle(c, cx, cy, rx, ry, color, rng, width){
+  const a0 = rng()*Math.PI*2, sweep = Math.PI*2 + 0.35 + rng()*0.55;
+  const p1=rng()*6.28, p2=rng()*6.28, tilt=(rng()-.5)*0.5, n=110;
+  const sx=(rng()-.5)*6, sy=(rng()-.5)*6;
+  const pts=[];
+  for (let i=0;i<=n;i++){
+    const t=i/n, a=a0+sweep*t;
+    const grow = 0.97 + t*0.07;
+    const wob = 1 + 0.035*Math.sin(2*a+p1) + 0.018*Math.sin(3*a+p2);
+    let px=Math.cos(a)*rx*grow*wob, py=Math.sin(a)*ry*grow*wob;
+    const qx=px*Math.cos(tilt)-py*Math.sin(tilt), qy=px*Math.sin(tilt)+py*Math.cos(tilt);
+    pts.push([cx+sx+qx, cy+sy+qy]);
+  }
+  penStroke(c, pts, width, color);
+}
+function penStrike(c, cx, cy, w, color, rng, width){
+  for (let k=0;k<2;k++){
+    const x0=cx-w*(0.95+rng()*0.15), x1=cx+w*(0.95+rng()*0.15);
+    const y0=cy+ (k?-1:1)*w*0.35 + (rng()-.5)*8, y1=cy-(k?-1:1)*w*0.35+(rng()-.5)*8;
+    const bend=(rng()-.5)*14, pts=[];
+    for (let i=0;i<=24;i++){ const t=i/24; pts.push([x0+(x1-x0)*t, y0+(y1-y0)*t + Math.sin(Math.PI*t)*bend]); }
+    penStroke(c, pts, width, color);
+  }
+}
+
+// ---------- layout + render ----------
+let cells = [];
+function daysIn(y,m){ return new Date(y,m+1,0).getDate(); }
+function firstDow(y,m){ return (new Date(y,m,1).getDay()+6)%7; } // Monday = 0
+
+async function ensureFonts(){
+  const st = fontStack();
+  try{ await Promise.all([
+    document.fonts.load(`64px ${st}`, "0123456789 ABCXYZ"),
+    document.fonts.load(`64px ${st}`, "НОЯБРЬ ДЕКАБРЬ ПН ВТ"),
+    document.fonts.load(`700 64px ${st}`, "0123 НОЯБРЬ")
+  ]); }catch(e){}
+}
+
+function render(){
+  const k = key(S.y,S.m);
+  const marks = MARKS[k] || {};
+  const seed = SEEDS[k] ?? hash(k);
+  const penColor = (PENS.find(p=>p.id===S.pen)||PENS[0]).c;
+  const L = S.lang;
+  const T = DEF_TEXT[L];
+  const topText = (S.topText||"").trim() || T.top;
+  const footText = (S.footText||"").trim() || T.foot;
+
+  ink.setTransform(1,0,0,1,0,0); ink.clearRect(0,0,W,H); ink.globalCompositeOperation="source-over"; ink.globalAlpha=1;
+  pen.clearRect(0,0,W,H);
+  const R = mulberry(seed);
+
+  const head = S.redHead ? RED : INK;
+  // top line
+  typeText(ink, topText, W/2, 300, {size:34, track:3, rng:R, align:"center"});
+  // month
+  let big, small;
+  if (L==="en"){ big=EN_M[S.m]; small=String(S.y); }
+  else if (L==="ru"){ big=RU_M[S.m]; small=String(S.y); }
+  else { big=RU_M[S.m]; small=`${EN_M[S.m]} · ${S.y}`; }
+  let bigSize = 124;
+  ink.font = `700 ${bigSize}px ${fontStack()}`;
+  const trackBig = 10;
+  let wBig = [...big].reduce((a,ch)=>a+ink.measureText(ch).width,0) + trackBig*([...big].length-1);
+  if (wBig > 880){ bigSize = Math.floor(bigSize*880/wBig); }
+  typeText(ink, big, W/2, 445, {size:bigSize, track:trackBig, rng:R, align:"center", color:head, bold:true});
+  typeText(ink, small, W/2, 520, {size:44, track:6, rng:R, align:"center", color:head});
+  // rule
+  ink.font = `34px ${fontStack()}`;
+  const dashW = ink.measureText("-").width + 6;
+  const nDash = Math.floor(880/dashW);
+  typeText(ink, "-".repeat(nDash), W/2, 585, {size:34, track:6, rng:R, align:"center"});
+
+  // weekday header
+  const gx = 100, gw = 880, colW = gw/7;
+  for (let i=0;i<7;i++){
+    const cx = gx + colW*i + colW/2;
+    if (L==="en"){
+      typeText(ink, EN_W[i].toUpperCase(), cx, 668, {size:36, track:2, rng:R, align:"center"});
+    } else {
+      typeText(ink, RU_W[i], cx, 660, {size:38, track:2, rng:R, align:"center"});
+      if (L==="both") typeText(ink, EN_W[i], cx, 700, {size:26, track:1, rng:R, align:"center"});
+    }
+  }
+
+  // dates
+  const fd = firstDow(S.y,S.m), dn = daysIn(S.y,S.m);
+  const rows = Math.ceil((fd+dn)/7);
+  const gTop = 745, gH = 800;
+  const rowH = Math.min(150, gH/rows);
+  const gStart = gTop + (gH - rowH*rows)/2;
+  cells = [];
+  for (let d=1; d<=dn; d++){
+    const idx = fd + d - 1, col = idx%7, row = Math.floor(idx/7);
+    const cx = gx + colW*col + colW/2, cy = gStart + rowH*row + rowH/2;
+    cells.push({d, x:gx+colW*col, y:gStart+rowH*row, w:colW, h:rowH});
+    const info = dayInfo(marks[d]);
+    const st = info.s;
+    const r = mulberry(seed ^ (d*2654435761));
+    const sz = 62;
+    const label = String(d);
+    const ny = info.slots ? cy - 14 : cy;          // число чуть выше, если под ним места
+    typeText(ink, label, cx, ny+sz*0.34, {size:sz, track:2, rng:r, align:"center"});
+    if (st==="typed"){
+      typeText(ink, "x".repeat(label.length), cx, ny+sz*0.34, {size:sz, track:2, rng:r, align:"center"});
+    } else if (st==="pen"){
+      penStrike(pen, cx, ny, label.length>1?44:30, penColor, r, S.pen==="pencil"?3:4.2);
+    } else if (st==="special"){
+      const rx = Math.min(colW*0.44, 54), ry = Math.min(rowH*(info.slots?0.3:0.38), info.slots?40:50);
+      penCircle(pen, cx, ny, rx, ry, penColor, r, S.pen==="pencil"?3.4:4.6);
+    }
+    if (info.slots) typeSlots(ink, cx, ny + (st==="special" ? 70 : 62), info.slots, info.booked, r, 36);
+  }
+
+  // legend: только то, что есть в этом месяце
+  const ly = 1600;
+  const LR = mulberry(seed+99);
+  const used = {special:false, typed:false, pen:false, slots:false};
+  for (let d=1; d<=dn; d++){ const i = dayInfo(marks[d]); if (i.s) used[i.s]=true; if (i.slots) used.slots=true; }
+  const items = [];
+  const ls = 28;
+  items.push({w:44, draw:(x,y)=>typeText(ink,"12",x+22,y,{size:32,track:2,rng:LR,align:"center"}), t:LEG.open[L]});
+  if (used.special) items.push({w:64, draw:(x,y)=>{ typeText(ink,"12",x+32,y,{size:32,track:2,rng:LR,align:"center"}); penCircle(pen,x+32,y-11,31,25,penColor,LR,S.pen==="pencil"?2.6:3.4); }, t:LEG.special[L]});
+  if (used.typed || used.pen){
+    const both = used.typed && used.pen;
+    items.push({w: both?110:44, draw:(x,y)=>{
+      let xx = x;
+      if (used.typed){ typeText(ink,"12",xx+22,y,{size:32,track:2,rng:LR,align:"center"}); typeText(ink,"xx",xx+22,y,{size:32,track:2,rng:LR,align:"center"}); xx += 66; }
+      if (used.pen){ typeText(ink,"12",xx+22,y,{size:32,track:2,rng:LR,align:"center"}); penStrike(pen,xx+22,y-11,24,penColor,LR,2.6); }
+      if (both) typeText(ink,"/",x+55,y,{size:28,rng:LR,align:"center"});
+    }, t:LEG.busy[L]});
+  }
+  if (used.slots) items.push({w:100, draw:(x,y)=>typeSlots(ink,x+46,y,3,1,LR,30), t:LEG.slots[L]});
+  // раскладка в строки по ширине
+  ink.font = `${ls}px ${fontStack()}`;
+  const gapItem = 46, maxW = 900;
+  items.forEach(it => { it.tw = ink.measureText("— "+it.t).width + [..."— "+it.t].length*1; it.full = it.w + 14 + it.tw; });
+  const rowsL = []; let cur = [], cw = 0;
+  items.forEach(it => { const add = (cur.length?gapItem:0) + it.full; if (cur.length && cw+add>maxW){ rowsL.push([cur,cw]); cur=[]; cw=0; } cw += (cur.length?gapItem:0)+it.full; cur.push(it); });
+  if (cur.length) rowsL.push([cur,cw]);
+  rowsL.forEach(([row,rw], ri) => {
+    let x = W/2 - rw/2; const y = ly + ri*56 - (rowsL.length-1)*28;
+    row.forEach(it => { it.draw(x,y); typeText(ink,"— "+it.t,x+it.w+14,y,{size:ls,track:1,rng:LR}); x += it.full + gapItem; });
+  });
+
+  // footer
+  typeText(ink, footText, W/2, 1688, {size:32, track:2, rng:LR, align:"center"});
+
+  // ribbon texture
+  if (!speckle) speckle = makeSpeckle();
+  ink.save(); ink.globalCompositeOperation="destination-out"; ink.globalAlpha=0.55; ink.drawImage(speckle,0,0); ink.restore();
+
+  // compose
+  ctx.setTransform(1,0,0,1,0,0);
+  ctx.globalCompositeOperation="source-over"; ctx.globalAlpha=1; ctx.filter="none";
+  ctx.drawImage(makePaper(S.paper),0,0);
+  ctx.globalCompositeOperation="multiply";
+  ctx.filter="blur(1.2px)"; ctx.globalAlpha=0.35; ctx.drawImage(inkC,0,0);
+  ctx.filter="blur(0.35px)"; ctx.globalAlpha=0.95; ctx.drawImage(inkC,0,0);
+  ctx.filter="none";
+  ctx.globalAlpha = S.pen==="pencil" ? 0.8 : 0.9;
+  ctx.drawImage(penC,0,0);
+  ctx.globalAlpha=1; ctx.globalCompositeOperation="source-over";
+}
+
+let rq = 0;
+async function redraw(){
+  const my = ++rq;
+  await ensureFonts();
+  if (my !== rq) return;
+  render();
+  syncUI();
+}
+
+// ---------- UI ----------
+const $ = id => document.getElementById(id);
+const selMonth = $("selMonth");
+RU_UI.forEach((n,i)=>{ const o=document.createElement("option"); o.value=i; o.textContent=n; selMonth.appendChild(o); });
+const pensBox = $("pens");
+PENS.forEach(p => {
+  const b=document.createElement("button"); b.className="sw"; b.style.background=p.c; b.title=p.name; b.setAttribute("aria-label",p.name);
+  b.dataset.pen=p.id; b.addEventListener("click",()=>{ S.pen=p.id; save(); redraw(); });
+  pensBox.appendChild(b);
+});
+function syncUI(){
+  $("mlabel").textContent = `${RU_UI[S.m]} ${S.y}`;
+  selMonth.value = S.m; $("selYear").value = S.y;
+  $("lang").value = S.lang; $("font").value = S.font;
+  $("paper").value = S.paper;
+  $("weight").value = S.weight; $("redHead").checked = S.redHead; $("showSafe").checked = S.showSafe;
+  $("safeT").hidden = $("safeB").hidden = !S.showSafe;
+  if (document.activeElement !== $("topText")) $("topText").value = S.topText;
+  if (document.activeElement !== $("footText")) $("footText").value = S.footText;
+  $("topText").placeholder = DEF_TEXT[S.lang].top; $("footText").placeholder = DEF_TEXT[S.lang].foot;
+  pensBox.querySelectorAll(".sw").forEach(b=>b.setAttribute("aria-pressed", String(b.dataset.pen===S.pen)));
+  document.querySelectorAll("[data-tool]").forEach(b=>b.setAttribute("aria-pressed", String(b.dataset.tool===tool)));
+  $("hint").textContent = tool==="slots" ? "Нажми на дату, чтобы задать количество съёмок и занятые места." : "Повторное нажатие той же отметкой снимает её. Дни без отметки — свободные.";
+  syncSlots();
+}
+const RU_GEN = ["января","февраля","марта","апреля","мая","июня","июля","августа","сентября","октября","ноября","декабря"];
+function syncSlots(){
+  const box = $("slotbox");
+  if (editDay==null || tool!=="slots"){ box.hidden = true; return; }
+  const m = (MARKS[key(S.y,S.m)]||{})[editDay] || {};
+  box.hidden = false;
+  $("slotTitle").textContent = `${editDay} ${RU_GEN[S.m]}`;
+  $("slotN").textContent = m.slots||0; $("bookN").textContent = Math.min(m.booked||0, m.slots||0);
+}
+function shift(n){ editDay=null; let m=S.m+n, y=S.y; while(m<0){m+=12;y--;} while(m>11){m-=12;y++;} S.m=m; S.y=y; save(); redraw(); }
+$("prev").onclick=()=>shift(-1); $("next").onclick=()=>shift(1);
+selMonth.onchange=()=>{ editDay=null; S.m=+selMonth.value; save(); redraw(); };
+$("selYear").onchange=()=>{ const v=parseInt($("selYear").value,10); if(v>=1900&&v<=2200){ S.y=v; save(); redraw(); } };
+$("lang").onchange=e=>{ S.lang=e.target.value; save(); redraw(); };
+$("font").onchange=e=>{ S.font=e.target.value; save(); redraw(); };
+$("paper").onchange=e=>{ S.paper=e.target.value; save(); redraw(); };
+$("weight").oninput=e=>{ S.weight=+e.target.value; save(); redraw(); };
+$("redHead").onchange=e=>{ S.redHead=e.target.checked; save(); redraw(); };
+$("showSafe").onchange=e=>{ S.showSafe=e.target.checked; save(); syncUI(); };
+$("topText").oninput=e=>{ S.topText=e.target.value; save(); redraw(); };
+$("footText").oninput=e=>{ S.footText=e.target.value; save(); redraw(); };
+$("reseed").onclick=()=>{ SEEDS[key(S.y,S.m)] = Math.floor(Math.random()*1e9); save(); redraw(); };
+document.querySelectorAll("[data-tool]").forEach(b=>b.addEventListener("click",()=>{ tool=b.dataset.tool; if (tool!=="slots") editDay=null; syncUI(); }));
+document.querySelectorAll("[data-step]").forEach(b=>b.addEventListener("click",()=>{
+  if (editDay==null) return;
+  const [f, dv] = b.dataset.step.split(":");
+  const k = key(S.y,S.m); const mm = MARKS[k] || (MARKS[k] = {});
+  const m = mm[editDay] || (mm[editDay] = {});
+  if (f==="slots"){ m.slots = Math.max(0, Math.min(6, (m.slots||0) + +dv)); m.booked = Math.min(m.booked||0, m.slots); }
+  else { m.booked = Math.max(0, Math.min(m.slots||0, (m.booked||0) + +dv)); }
+  if (!m.slots){ delete m.slots; delete m.booked; }
+  if (!m.s && !m.slots) delete mm[editDay];
+  save(); render(); syncSlots();
+}));
+$("slotDone").onclick=()=>{ editDay=null; syncSlots(); };
+$("clear").onclick=()=>{ delete MARKS[key(S.y,S.m)]; editDay=null; save(); redraw(); toast("Отметки месяца сняты"); };
+
+cv.addEventListener("click", e => {
+  const r = cv.getBoundingClientRect();
+  const x = (e.clientX - r.left) * W / r.width, y = (e.clientY - r.top) * H / r.height;
+  const c = cells.find(c => x>=c.x && x<c.x+c.w && y>=c.y && y<c.y+c.h);
+  if (!c) return;
+  const k = key(S.y,S.m); const m = MARKS[k] || (MARKS[k] = {});
+  if (tool==="slots"){
+    editDay = c.d;
+    const d = m[c.d] || (m[c.d] = {});
+    if (!d.slots){ d.slots = 2; d.booked = 0; }   // по умолчанию 2 съёмки
+    save(); render(); syncSlots();
+    $("slotbox").scrollIntoView({block:"nearest", behavior:"smooth"});
+    return;
+  }
+  if (tool==="erase"){ delete m[c.d]; }
+  else {
+    const d = m[c.d] || (m[c.d] = {});
+    if (d.s===tool) delete d.s; else d.s = tool;
+    if (!d.s && !d.slots) delete m[c.d];
+  }
+  save(); render();
+});
+
+// custom font upload
+function b64(buf){ let s=""; const u=new Uint8Array(buf); for(let i=0;i<u.length;i+=0x8000) s+=String.fromCharCode.apply(null,u.subarray(i,i+0x8000)); return btoa(s); }
+function unb64(str){ const s=atob(str), u=new Uint8Array(s.length); for(let i=0;i<s.length;i++) u[i]=s.charCodeAt(i); return u.buffer; }
+async function installFont(buf, name){
+  const ff = new FontFace("UserType", buf);
+  await ff.load(); document.fonts.add(ff);
+  const o = $("optUser"); o.disabled=false; o.textContent = "Свой: " + (name||"загруженный");
+}
+$("fontFile").addEventListener("change", async e => {
+  const f = e.target.files && e.target.files[0]; if (!f) return;
+  try{
+    const buf = await f.arrayBuffer();
+    await installFont(buf.slice(0), f.name.replace(/\.[^.]+$/,""));
+    try{ localStorage.setItem("twc.font", b64(buf)); localStorage.setItem("twc.fontName", f.name.replace(/\.[^.]+$/,"")); }catch(_){ }
+    S.font="user"; save(); redraw(); toast("Шрифт подключён");
+  }catch(err){ toast("Не получилось прочитать шрифт — нужен .ttf, .otf или .woff"); }
+});
+(async () => {
+  try{
+    const f = localStorage.getItem("twc.font");
+    if (f){ await installFont(unb64(f), localStorage.getItem("twc.fontName")); }
+    else if (S.font==="user"){ S.font="xt"; }
+  }catch(e){ if (S.font==="user") S.font="xt"; }
+  redraw();
+})();
+document.fonts && document.fonts.addEventListener && document.fonts.addEventListener("loadingdone", () => render());
+
+// toast
+let tt; function toast(t){ const el=$("toast"); el.textContent=t; el.classList.add("on"); clearTimeout(tt); tt=setTimeout(()=>el.classList.remove("on"),2200); }
+
+// download
+function fallback(url){
+  const m=document.createElement("div"); m.className="modal";
+  m.innerHTML = `<div class="card"><strong>Сохрани картинку</strong><img alt="Готовая сторис"><p class="note">Телефон: нажми и удерживай картинку → «Сохранить в Фото». Компьютер: правый клик → «Сохранить изображение».</p><button class="btn">Закрыть</button></div>`;
+  m.querySelector("img").src = url;
+  m.querySelector("button").onclick=()=>m.remove();
+  m.addEventListener("click", e=>{ if(e.target===m) m.remove(); });
+  document.body.appendChild(m);
+}
+async function offerFile(blob, name, mime){
+  const file = new File([blob], name, {type:mime});
+  const touch = matchMedia("(pointer: coarse)").matches;
+  if (touch && navigator.canShare && navigator.canShare({files:[file]})){
+    try{ await navigator.share({files:[file]}); return "shared"; }
+    catch(e){ if (e && e.name==="AbortError") return "cancel"; }
+  }
+  try{
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href=url; a.download=name; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url), 4000);
+    return "saved";
+  }catch(e){ return "fail"; }
+}
+$("dl").onclick = async () => {
+  render();
+  const name = `calendar-${key(S.y,S.m)}.png`;
+  const blob = await new Promise(r => cv.toBlob(r, "image/png"));
+  const res = await offerFile(blob, name, "image/png");
+  if (res==="saved") toast("Картинка сохранена в Загрузки");
+  else if (res==="fail") fallback(cv.toDataURL("image/png"));
+};
+
+
+syncUI();
+render();
+})();
+if ("serviceWorker" in navigator && location.protocol !== "file:"){
+  window.addEventListener("load", () => { navigator.serviceWorker.register("sw.js").catch(()=>{}); });
+}
+</script>
+</body>
+</html>
