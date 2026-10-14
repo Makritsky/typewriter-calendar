@@ -288,7 +288,7 @@ const store = {
 const now = new Date();
 let S = Object.assign({
   y: now.getFullYear(), m: now.getMonth(), lang:"both", font:"xt", pen:"red", busyStyle:"typed",
-  paper:"paper", weight:1, redHead:false, showSafe:false, topText:"", footText:"", showTop:true, showFoot:true, legOn:true, leg:{}, legCustom:[]
+  paper:"paper", weight:1, redHead:false, showSafe:false, topText:"", footText:"", showTop:true, showFoot:true, legOn:true, leg:{}, legCustom:[], strike:"mix"
 }, store.get("twc.settings", {}));
 let MARKS = store.get("twc.marks", null);
 let SEEDS = store.get("twc.seeds", {});
@@ -511,13 +511,46 @@ function penCircle(c, cx, cy, rx, ry, color, rng, width){
   }
   penStroke(c, pts, width, color);
 }
-function penStrike(c, cx, cy, w, color, rng, width){
-  for (let k=0;k<2;k++){
-    const x0=cx-w*(0.95+rng()*0.15), x1=cx+w*(0.95+rng()*0.15);
-    const y0=cy+ (k?-1:1)*w*0.35 + (rng()-.5)*8, y1=cy-(k?-1:1)*w*0.35+(rng()-.5)*8;
-    const bend=(rng()-.5)*14, pts=[];
-    for (let i=0;i<=24;i++){ const t=i/24; pts.push([x0+(x1-x0)*t, y0+(y1-y0)*t + Math.sin(Math.PI*t)*bend]); }
-    penStroke(c, pts, width, color);
+// зачёркивания ручкой: несколько манер, у каждой даты своя (стабильно по сиду)
+const STRIKES = ["slash","cross","line","double","scribble","hook"];
+function strokeLine(c, x0, y0, x1, y1, bend, width, color, rng, wob){
+  const pts=[], n=28;
+  for (let i=0;i<=n;i++){ const t=i/n;
+    pts.push([x0+(x1-x0)*t + (rng()-.5)*(wob||1.2), y0+(y1-y0)*t + Math.sin(Math.PI*t)*bend + (rng()-.5)*(wob||1.2)]); }
+  penStroke(c, pts, width, color);
+  // второй проход чуть смещён — плотнее, как с нажимом
+  penStroke(c, pts.map(p=>[p[0]+width*0.18, p[1]+width*0.12]), width*0.7, color);
+}
+function penStrike(c, cx, cy, w, color, rng, width, style){
+  const st = "cross";
+  const J = () => (rng()-.5)*w*0.12, h = w*0.62;
+  if (st==="slash"){
+    strokeLine(c, cx-w*1.05+J(), cy+h+J(), cx+w*1.05+J(), cy-h+J(), (rng()-.5)*w*0.25, width*1.1, color, rng);
+  } else if (st==="cross"){
+    strokeLine(c, cx-w+J(), cy+h*0.8+J(), cx+w+J(), cy-h*0.8+J(), (rng()-.5)*w*0.2, width, color, rng);
+    strokeLine(c, cx-w*0.95+J(), cy-h*0.8+J(), cx+w*0.95+J(), cy+h*0.8+J(), (rng()-.5)*w*0.2, width, color, rng);
+  } else if (st==="line"){
+    const tilt=(rng()-.5)*w*0.25;
+    strokeLine(c, cx-w*1.25, cy+tilt+J(), cx+w*1.25, cy-tilt+J(), (rng()-.5)*w*0.18, width*1.15, color, rng);
+  } else if (st==="double"){
+    const g=w*0.16, tilt=(rng()-.5)*w*0.2;
+    strokeLine(c, cx-w*1.15, cy-g+tilt, cx+w*1.15, cy-g-tilt+J(), (rng()-.5)*w*0.12, width*0.9, color, rng);
+    strokeLine(c, cx-w*1.1+J(), cy+g+tilt, cx+w*1.2, cy+g-tilt+J(), (rng()-.5)*w*0.12, width*0.9, color, rng);
+  } else if (st==="scribble"){
+    // плотные петли поверх числа, как когда зарисовывают ручкой
+    const pts=[], loops=4+Math.floor(rng()*3), N=loops*24;
+    const x0=cx-w*0.9, span=w*1.8, ph=rng()*6.28, f1=1+rng()*2, f2=rng()*6.28;
+    for (let i=0;i<=N;i++){
+      const t=i/N, th=t*loops*Math.PI*2+ph;
+      const rr = h*(0.55 + 0.35*Math.abs(Math.sin(t*Math.PI*f1+f2)));     // петли разного размера
+      pts.push([x0+span*t - Math.sin(th)*rr*0.8 + (rng()-.5)*3, cy + Math.cos(th)*rr*(0.9+rng()*0.25) + (rng()-.5)*3]);
+    }
+    penStroke(c, pts, width*0.6, color);
+  } else { // hook: косая черта с росчерком-возвратом
+    const x0=cx-w*1.05, y0=cy+h*0.9, x1=cx+w*1.0, y1=cy-h*0.9;
+    strokeLine(c, x0+J(), y0+J(), x1, y1, (rng()-.5)*w*0.2, width*1.1, color, rng);
+    const pts=[]; for (let i=0;i<=14;i++){ const t=i/14; pts.push([x1 - t*w*0.55 + Math.sin(t*Math.PI)*w*0.12, y1 + t*h*0.35]); }
+    penStroke(c, pts, width*0.8, color);
   }
 }
 
@@ -599,7 +632,7 @@ function render(){
     items.push({w: both?110:44, draw:(x,y)=>{
       let xx = x;
       if (used.typed){ typeText(ink,"12",xx+22,y,{size:32,track:2,rng:LR,align:"center"}); typeText(ink,"xx",xx+22,y,{size:32,track:2,rng:LR,align:"center"}); xx += 66; }
-      if (used.pen){ typeText(ink,"12",xx+22,y,{size:32,track:2,rng:LR,align:"center"}); penStrike(pen,xx+22,y-11,24,penColor,LR,2.6); }
+      if (used.pen){ typeText(ink,"12",xx+22,y,{size:32,track:2,rng:LR,align:"center"}); penStrike(pen,xx+22,y-11,27,penColor,LR,S.pen==="pencil"?4.2:5,S.strike); }
       if (both) typeText(ink,"/",x+55,y,{size:28,rng:LR,align:"center"});
     }, t:LG("busy").t});
   }
@@ -611,7 +644,7 @@ function render(){
       const nx = x + wNum/2;
       typeText(ink,"12",nx,y,{size:32,track:2,rng:LR,align:"center"});
       if (c.typed) typeText(ink,"xx",nx,y,{size:32,track:2,rng:LR,align:"center"});
-      if (c.pen) penStrike(pen,nx,y-11,24,penColor,LR,2.6);
+      if (c.pen) penStrike(pen,nx,y-11,27,penColor,LR,S.pen==="pencil"?4.2:5,S.strike);
       if (c.special) penCircle(pen,nx,y-11,31,25,penColor,LR,S.pen==="pencil"?2.6:3.4);
       if (c.slots) typeSlots(ink, x+wNum+36, y, 2, 1, LR, 26);
     }, t:(c.t||"").trim() || "…"});
@@ -645,7 +678,7 @@ function render(){
     const ny = info.slots ? cy - 14 : cy;          // число чуть выше, если под ним места
     typeText(ink, label, cx, ny+sz*0.34, {size:sz, track:2, rng:r, align:"center"});
     if (info.typed) typeText(ink, "x".repeat(label.length), cx, ny+sz*0.34, {size:sz, track:2, rng:r, align:"center"});
-    if (info.pen) penStrike(pen, cx, ny, label.length>1?44:30, penColor, r, S.pen==="pencil"?3:4.2);
+    if (info.pen) penStrike(pen, cx, ny, label.length>1?50:36, penColor, r, S.pen==="pencil"?6.5:8, S.strike);
     if (info.special){
       const rx = Math.min(colW*0.44, 54), ry = Math.min(rowH*(info.slots?0.3:0.38), info.slots?40:50);
       penCircle(pen, cx, ny, rx, ry, penColor, r, S.pen==="pencil"?3.4:4.6);
