@@ -81,6 +81,16 @@ select,input[type=number],input[type=text]{font:inherit;font-size:14px;color:var
 .upload input{font-size:13px;max-width:100%}
 .note{font-size:12.5px;color:var(--muted);margin:0}
 input[type=text]:disabled{opacity:.45}
+.legbox{display:flex;flex-direction:column;gap:8px}
+.legbox[aria-disabled="true"]{opacity:.45}
+.legrow{display:grid;grid-template-columns:auto 5.5ch minmax(0,1fr);gap:8px;align-items:center}
+.custlist{display:flex;flex-direction:column;gap:10px}
+.cust{border:1px solid var(--line);border-radius:8px;padding:8px;display:flex;flex-direction:column;gap:8px;background:var(--bg)}
+.cust .chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.chip{font:inherit;font-size:13px;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:999px;padding:4px 10px;cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.chip.del{margin-left:auto;border-color:transparent;background:transparent;color:var(--muted)}
+.legs{font-family:var(--f-type);font-size:14px;text-align:center;color:var(--muted)}
 input[type=range]{width:100%;accent-color:var(--ribbon)}
 .slotbox{width:min(100%,460px);background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:10px}
 .slothead{display:flex;justify-content:space-between;align-items:center;gap:10px;font-family:var(--f-type);font-size:17px}
@@ -213,6 +223,21 @@ input[type=range]{width:100%;accent-color:var(--ribbon)}
         <p class="note">Пустое поле — текст по умолчанию для выбранного языка.</p>
       </div>
 
+      <div class="group">
+        <h2>Легенда</h2>
+        <label class="check"><input type="checkbox" id="legOn"> Показывать легенду</label>
+        <div class="legbox" id="legbox">
+          <div class="legrow"><input type="checkbox" id="leg-open-on" aria-label="Показывать пункт «свободно»"><span class="legs">12</span><input type="text" id="leg-open-t" maxlength="40" aria-label="Текст пункта «свободно»"></div>
+          <div class="legrow"><input type="checkbox" id="leg-special-on" aria-label="Показывать пункт «особый день»"><span class="legs">◯</span><input type="text" id="leg-special-t" maxlength="40" aria-label="Текст пункта «особый день»"></div>
+          <div class="legrow"><input type="checkbox" id="leg-busy-on" aria-label="Показывать пункт «занято»"><span class="legs">x</span><input type="text" id="leg-busy-t" maxlength="40" aria-label="Текст пункта «занято»"></div>
+          <div class="legrow"><input type="checkbox" id="leg-slots-on" aria-label="Показывать пункт «места»"><span class="legs">x o o</span><input type="text" id="leg-slots-t" maxlength="40" aria-label="Текст пункта «места»"></div>
+        </div>
+        <p class="note">Пункты «особый день», «занято» и «места» появляются в легенде, только если такие отметки есть в месяце.</p>
+        <div class="f" style="font-size:13px;color:var(--muted)">Свои обозначения — собери из отметок и подпиши</div>
+        <div class="custlist" id="custList"></div>
+        <button class="btn" id="custAdd">+ Добавить обозначение</button>
+      </div>
+
     </aside>
   </div>
 </div>
@@ -247,6 +272,7 @@ const DEF_TEXT = {
   en:{top:"BOOKING CALENDAR", foot:"DM to book"}
 };
 const INK = "#1c1b1d", RED = "#b8231b";
+const LEG_KEYS = ["open","special","busy","slots"];
 const LEG = {
   open:   {ru:"свободно", en:"open", both:"свободно / open"},
   special:{ru:"особый день", en:"special day", both:"особый день / special"},
@@ -262,7 +288,7 @@ const store = {
 const now = new Date();
 let S = Object.assign({
   y: now.getFullYear(), m: now.getMonth(), lang:"both", font:"xt", pen:"red", busyStyle:"typed",
-  paper:"paper", weight:1, redHead:false, showSafe:false, topText:"", footText:"", showTop:true, showFoot:true
+  paper:"paper", weight:1, redHead:false, showSafe:false, topText:"", footText:"", showTop:true, showFoot:true, legOn:true, leg:{}, legCustom:[]
 }, store.get("twc.settings", {}));
 let MARKS = store.get("twc.marks", null);
 let SEEDS = store.get("twc.seeds", {});
@@ -558,8 +584,53 @@ function render(){
 
   // dates
   const fd = firstDow(S.y,S.m), dn = daysIn(S.y,S.m);
+  // legend: только то, что есть в этом месяце
+  const ly = 1600;
+  const LR = mulberry(seed+99);
+  const used = {special:false, typed:false, pen:false, slots:false};
+  for (let d=1; d<=dn; d++){ const i = dayInfo(marks[d]); ["special","typed","pen"].forEach(f=>{ if (i[f]) used[f]=true; }); if (i.slots) used.slots=true; }
+  const items = [];
+  const LG = k => { const o = (S.leg||{})[k] || {}; return {on: o.on!==false, t: (o.t||"").trim() || LEG[k][L]}; };
+  const ls = 28;
+  if (LG("open").on) items.push({w:44, draw:(x,y)=>typeText(ink,"12",x+22,y,{size:32,track:2,rng:LR,align:"center"}), t:LG("open").t});
+  if (used.special && LG("special").on) items.push({w:64, draw:(x,y)=>{ typeText(ink,"12",x+32,y,{size:32,track:2,rng:LR,align:"center"}); penCircle(pen,x+32,y-11,31,25,penColor,LR,S.pen==="pencil"?2.6:3.4); }, t:LG("special").t});
+  if ((used.typed || used.pen) && LG("busy").on){
+    const both = used.typed && used.pen;
+    items.push({w: both?110:44, draw:(x,y)=>{
+      let xx = x;
+      if (used.typed){ typeText(ink,"12",xx+22,y,{size:32,track:2,rng:LR,align:"center"}); typeText(ink,"xx",xx+22,y,{size:32,track:2,rng:LR,align:"center"}); xx += 66; }
+      if (used.pen){ typeText(ink,"12",xx+22,y,{size:32,track:2,rng:LR,align:"center"}); penStrike(pen,xx+22,y-11,24,penColor,LR,2.6); }
+      if (both) typeText(ink,"/",x+55,y,{size:28,rng:LR,align:"center"});
+    }, t:LG("busy").t});
+  }
+  if (used.slots && LG("slots").on) items.push({w:100, draw:(x,y)=>typeSlots(ink,x+46,y,3,1,LR,30), t:LG("slots").t});
+  (S.legCustom||[]).forEach(c => {
+    if (c.on===false || !(c.special||c.typed||c.pen||c.slots)) return;
+    const wNum = c.special ? 64 : 44, w = wNum + (c.slots ? 70 : 0);
+    items.push({w, draw:(x,y)=>{
+      const nx = x + wNum/2;
+      typeText(ink,"12",nx,y,{size:32,track:2,rng:LR,align:"center"});
+      if (c.typed) typeText(ink,"xx",nx,y,{size:32,track:2,rng:LR,align:"center"});
+      if (c.pen) penStrike(pen,nx,y-11,24,penColor,LR,2.6);
+      if (c.special) penCircle(pen,nx,y-11,31,25,penColor,LR,S.pen==="pencil"?2.6:3.4);
+      if (c.slots) typeSlots(ink, x+wNum+36, y, 2, 1, LR, 26);
+    }, t:(c.t||"").trim() || "…"});
+  });
+  if (!S.legOn) items.length = 0;
+  // раскладка в строки по ширине
+  ink.font = `${ls}px ${fontStack()}`;
+  const gapItem = 46, maxW = 900;
+  items.forEach(it => { it.tw = ink.measureText("— "+it.t).width + [..."— "+it.t].length*1; it.full = it.w + 14 + it.tw; });
+  const rowsL = []; let cur = [], cw = 0;
+  items.forEach(it => { const add = (cur.length?gapItem:0) + it.full; if (cur.length && cw+add>maxW){ rowsL.push([cur,cw]); cur=[]; cw=0; } cw += (cur.length?gapItem:0)+it.full; cur.push(it); });
+  if (cur.length) rowsL.push([cur,cw]);
+  // раскладка снизу вверх: подпись → легенда → сетка занимает оставшееся место
+  const footY = 1688, legRowH = 52;
+  const legLastY = S.showFoot ? footY - 62 : 1660;
+  const legFirstY = legLastY - (rowsL.length-1)*legRowH;
+  const gridBottom = rowsL.length ? legFirstY - 48 : (S.showFoot ? footY - 50 : 1660);
   const rows = Math.ceil((fd+dn)/7);
-  const gTop = 745, gH = 800;
+  const gTop = 745, gH = Math.min(860, gridBottom - gTop);
   const rowH = Math.min(150, gH/rows);
   const gStart = gTop + (gH - rowH*rows)/2;
   cells = [];
@@ -582,39 +653,13 @@ function render(){
     if (info.slots) typeSlots(ink, cx, ny + (info.special ? 70 : 62), info.slots, info.booked, r, 36);
   }
 
-  // legend: только то, что есть в этом месяце
-  const ly = 1600;
-  const LR = mulberry(seed+99);
-  const used = {special:false, typed:false, pen:false, slots:false};
-  for (let d=1; d<=dn; d++){ const i = dayInfo(marks[d]); ["special","typed","pen"].forEach(f=>{ if (i[f]) used[f]=true; }); if (i.slots) used.slots=true; }
-  const items = [];
-  const ls = 28;
-  items.push({w:44, draw:(x,y)=>typeText(ink,"12",x+22,y,{size:32,track:2,rng:LR,align:"center"}), t:LEG.open[L]});
-  if (used.special) items.push({w:64, draw:(x,y)=>{ typeText(ink,"12",x+32,y,{size:32,track:2,rng:LR,align:"center"}); penCircle(pen,x+32,y-11,31,25,penColor,LR,S.pen==="pencil"?2.6:3.4); }, t:LEG.special[L]});
-  if (used.typed || used.pen){
-    const both = used.typed && used.pen;
-    items.push({w: both?110:44, draw:(x,y)=>{
-      let xx = x;
-      if (used.typed){ typeText(ink,"12",xx+22,y,{size:32,track:2,rng:LR,align:"center"}); typeText(ink,"xx",xx+22,y,{size:32,track:2,rng:LR,align:"center"}); xx += 66; }
-      if (used.pen){ typeText(ink,"12",xx+22,y,{size:32,track:2,rng:LR,align:"center"}); penStrike(pen,xx+22,y-11,24,penColor,LR,2.6); }
-      if (both) typeText(ink,"/",x+55,y,{size:28,rng:LR,align:"center"});
-    }, t:LEG.busy[L]});
-  }
-  if (used.slots) items.push({w:100, draw:(x,y)=>typeSlots(ink,x+46,y,3,1,LR,30), t:LEG.slots[L]});
-  // раскладка в строки по ширине
-  ink.font = `${ls}px ${fontStack()}`;
-  const gapItem = 46, maxW = 900;
-  items.forEach(it => { it.tw = ink.measureText("— "+it.t).width + [..."— "+it.t].length*1; it.full = it.w + 14 + it.tw; });
-  const rowsL = []; let cur = [], cw = 0;
-  items.forEach(it => { const add = (cur.length?gapItem:0) + it.full; if (cur.length && cw+add>maxW){ rowsL.push([cur,cw]); cur=[]; cw=0; } cw += (cur.length?gapItem:0)+it.full; cur.push(it); });
-  if (cur.length) rowsL.push([cur,cw]);
   rowsL.forEach(([row,rw], ri) => {
-    let x = W/2 - rw/2; const y = ly + ri*56 - (rowsL.length-1)*28;
+    let x = W/2 - rw/2; const y = legFirstY + ri*legRowH;
     row.forEach(it => { it.draw(x,y); typeText(ink,"— "+it.t,x+it.w+14,y,{size:ls,track:1,rng:LR}); x += it.full + gapItem; });
   });
 
   // footer
-  if (S.showFoot) typeText(ink, footText, W/2, 1688, {size:32, track:2, rng:LR, align:"center"});
+  if (S.showFoot) typeText(ink, footText, W/2, footY, {size:32, track:2, rng:LR, align:"center"});
 
   // ribbon texture
   if (!speckle) speckle = makeSpeckle();
@@ -674,6 +719,10 @@ function syncUI(){
   if (document.activeElement !== $("topText")) $("topText").value = S.topText;
   if (document.activeElement !== $("footText")) $("footText").value = S.footText;
   $("showTop").checked = S.showTop; $("showFoot").checked = S.showFoot;
+  $("legOn").checked = S.legOn; $("legbox").setAttribute("aria-disabled", String(!S.legOn));
+  $("custList").style.opacity = S.legOn ? "" : ".45";
+  LEG_KEYS.forEach(k=>{ const o=(S.leg||{})[k]||{}; $("leg-"+k+"-on").checked = o.on!==false; $("leg-"+k+"-on").disabled = !S.legOn;
+    const t=$("leg-"+k+"-t"); t.placeholder = LEG[k][S.lang]; t.disabled = !S.legOn || o.on===false; if (document.activeElement!==t) t.value = o.t||""; });
   $("topText").disabled = !S.showTop; $("footText").disabled = !S.showFoot;
   $("topText").placeholder = DEF_TEXT[S.lang].top; $("footText").placeholder = DEF_TEXT[S.lang].foot;
   pensBox.querySelectorAll(".sw").forEach(b=>b.setAttribute("aria-pressed", String(b.dataset.pen===S.pen)));
@@ -701,6 +750,35 @@ $("paper").onchange=e=>{ S.paper=e.target.value; save(); redraw(); };
 $("weight").oninput=e=>{ S.weight=+e.target.value; save(); redraw(); };
 $("redHead").onchange=e=>{ S.redHead=e.target.checked; save(); redraw(); };
 $("showSafe").onchange=e=>{ S.showSafe=e.target.checked; save(); syncUI(); };
+function legSet(k, f, v){ S.leg = Object.assign({}, S.leg); S.leg[k] = Object.assign({}, S.leg[k], {[f]:v}); save(); redraw(); }
+const CUST_PARTS = [["special","◯ кружок"],["typed","x перебить"],["pen","⁄ зачеркнуть"],["slots","x o места"]];
+function renderCust(){
+  const box = $("custList"); box.innerHTML = "";
+  (S.legCustom||[]).forEach((c, i) => {
+    const el = document.createElement("div"); el.className = "cust";
+    const chips = document.createElement("div"); chips.className = "chips";
+    CUST_PARTS.forEach(([f, label]) => {
+      const b = document.createElement("button"); b.className = "chip"; b.textContent = label;
+      b.setAttribute("aria-pressed", String(!!c[f]));
+      b.onclick = () => { const cur = S.legCustom[i]; S.legCustom = S.legCustom.slice(); S.legCustom[i] = Object.assign({}, cur, {[f]: !cur[f]}); save(); renderCust(); redraw(); };
+      chips.appendChild(b);
+    });
+    const del = document.createElement("button"); del.className = "chip del"; del.textContent = "Удалить"; del.setAttribute("aria-label","Удалить обозначение");
+    del.onclick = () => { S.legCustom = S.legCustom.filter((_,j)=>j!==i); save(); renderCust(); redraw(); };
+    chips.appendChild(del);
+    const t = document.createElement("input"); t.type = "text"; t.maxLength = 40; t.id = "cust-t-"+i;
+    t.placeholder = "Подпись, например: мини-сессии"; t.value = c.t || ""; t.setAttribute("aria-label","Подпись обозначения");
+    t.oninput = () => { S.legCustom = S.legCustom.slice(); S.legCustom[i] = Object.assign({}, S.legCustom[i], {t: t.value}); save(); redraw(); };
+    el.appendChild(chips); el.appendChild(t); box.appendChild(el);
+  });
+}
+$("custAdd").onclick = () => { S.legCustom = (S.legCustom||[]).concat([{special:true, pen:true, t:""}]); S.legOn = true; save(); renderCust(); redraw(); const ins = $("custList").querySelectorAll("input"); if (ins.length) ins[ins.length-1].focus(); };
+renderCust();
+$("legOn").onchange=e=>{ S.legOn=e.target.checked; save(); redraw(); };
+LEG_KEYS.forEach(k=>{
+  $("leg-"+k+"-on").onchange=e=>legSet(k,"on",e.target.checked);
+  $("leg-"+k+"-t").oninput=e=>legSet(k,"t",e.target.value);
+});
 $("showTop").onchange=e=>{ S.showTop=e.target.checked; save(); redraw(); };
 $("showFoot").onchange=e=>{ S.showFoot=e.target.checked; save(); redraw(); };
 $("topText").oninput=e=>{ S.topText=e.target.value; save(); redraw(); };
